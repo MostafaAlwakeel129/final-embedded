@@ -57,6 +57,7 @@
 #include "Exti.h"
 #include "Fsm.h"
 #include "Usart.h"
+#include "Nvic.h"
 
 /* =========================================================
  * Global elevator instance
@@ -100,22 +101,6 @@ static void Btn_EmergencyStop(void)
 static void Btn_ClearEmergency(void)
 {
     FSM_ClearEmergency(&elev);
-}
-
-/* =========================================================
- * Helper: set NVIC priority for a single EXTI line
- * Lower numeric value = higher priority.
- * Emergency button (PA3, EXTI3, IRQ 9) gets priority 0.
- * All others get priority 3 (lowest used here).
- *
- * STM32F4 NVIC_IPR registers: each IRQ gets one byte.
- * Register address: 0xE000E400 + IRQ_number
- * Only top 4 bits of each byte are implemented on Cortex-M4.
- * ========================================================= */
-static void SetNvicPriority(uint8 irqNumber, uint8 priority)
-{
-    volatile uint8 *ipr = (volatile uint8 *)(0xE000E400UL + irqNumber);
-    *ipr = (uint8)(priority << 4U);   /* shift into top 4 bits */
 }
 
 /* =========================================================

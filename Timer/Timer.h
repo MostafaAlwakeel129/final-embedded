@@ -33,6 +33,8 @@ void Timer_DelayMs(uint8 TimerId, uint32 DelayMs);
 
 void Timer_DelayMsAsync(uint8 TimerId, uint32 DelayMs, TimerCallback Callback);
 
+void Timer_StartPeriodic(uint8 TimerId, uint32 DelayMs, TimerCallback Callback);
+
 void Timer_OcToggleInit(uint8 TimerId, uint8 Channel,
                         uint16 Prescaler, uint16 Period);
 

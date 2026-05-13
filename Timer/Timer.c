@@ -18,6 +18,7 @@ static uint32 Timer_BaseAddresses[NUM_OF_TIMERS] = {TIM2_BASE_ADDR, TIM3_BASE_AD
 static uint8 Timer_NvicIrq[NUM_OF_TIMERS] = {28, 29, 30, 50};
 
 static TimerCallback Timer_Callbacks[NUM_OF_TIMERS] = {0};
+static uint8         Timer_IsPeriodic[NUM_OF_TIMERS] = {0U, 0U, 0U, 0U};
 
 static TimerType *Timer_GetPeripheral(uint8 TimerId) {
     return (TimerType *) Timer_BaseAddresses[TimerId - TIMER2];
@@ -78,6 +79,7 @@ void Timer_DelayMsAsync(uint8 TimerId, uint32 DelayMs, TimerCallback Callback) {
     uint8 irqNum = Timer_NvicIrq[index];
 
     Timer_Callbacks[index] = Callback;
+    Timer_IsPeriodic[index] = 0U;
 
     timer->CR1 = 0; // Stop & reset
     timer->PSC = 15999U / 3;
@@ -140,19 +142,55 @@ void Timer_OcToggleInit(uint8 TimerId, uint8 Channel, uint16 Prescaler, uint16 P
 }
 
 static void Timer_HandleIrq(uint8 index) {
-    TimerType *timer =(TimerType *)Timer_BaseAddresses[index];
-
+    TimerType *timer = (TimerType *)Timer_BaseAddresses[index];
 
     if (READ_BIT(timer->SR, SR_UIF)) {
-        timer->SR = 0; // Clear UIF
-        CLEAR_BIT(timer->DIER, DIER_UIE); // Disable further IRQs
-        CLEAR_BIT(timer->CR1, CR1_CEN); // Stop counter
+        timer->SR = 0; /* Clear UIF */
 
-        if (Timer_Callbacks[index] != 0) {
-            Timer_Callbacks[index]();
+        if (Timer_IsPeriodic[index]) {
+            /* Periodic: keep running, just fire callback */
+            if (Timer_Callbacks[index] != 0) {
+                Timer_Callbacks[index]();
+            }
+        } else {
+            /* One-shot: stop timer and disable UIE before callback */
+            CLEAR_BIT(timer->DIER, DIER_UIE);
+            CLEAR_BIT(timer->CR1, CR1_CEN);
+            if (Timer_Callbacks[index] != 0) {
+                Timer_Callbacks[index]();
+            }
         }
     }
 }
+
+void Timer_StartPeriodic(uint8 TimerId, uint32 DelayMs, TimerCallback Callback)
+{
+    TimerType *timer =(TimerType *)Timer_BaseAddresses[TimerId - TIMER2];
+    uint8 index = TimerId - TIMER2;
+    uint8 irqNum = Timer_NvicIrq[index];
+
+    Timer_Callbacks[index] = Callback;
+    Timer_IsPeriodic[index] = 1U;
+
+    CLEAR_BIT(timer->CR1, CR1_CEN);
+    timer->PSC = (uint16)((16000000UL / 1000UL) - 1UL);
+    /* Auto-reload: overflow every DelayMs ticks */
+    timer->ARR = (uint16)(DelayMs - 1UL);
+    /* Reset counter */
+    timer->CNT = 0U;
+    /* Clear any pending update flag */
+    timer->SR = 0U;
+    /* Enable update interrupt */
+    timer->DIER = 0x0001U;
+    /* Enable counter — NO one-pulse mode (OPM stays 0), ARPE=1 */
+    CLEAR_BIT(timer->CR1, CR1_OPM);
+    /* Enable auto-reload preload */
+    SET_BIT(timer->CR1, CR1_ARPE);
+    Nvic_EnableIrq(irqNum);
+    /* Start counter */
+    SET_BIT(timer->CR1, CR1_CEN);
+}
+
 
 void TIM2_IRQHandler(void) {
     Timer_HandleIrq(0);

@@ -15,5 +15,6 @@ void Nvic_EnableIrq(uint8 IrqNumber);
 
 void Nvic_DisableIrq(uint8 IrqNumber);
 
+void SetNvicPriority(uint8 irqNumber, uint8 priority);
 
 #endif //NVIC_H

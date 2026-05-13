@@ -24,3 +24,10 @@ void Nvic_EnableIrq(uint8 IrqNumber) {
 void Nvic_DisableIrq(uint8 IrqNumber) {
     NVIC->NVIC_ICER[IrqNumber / 32] |= (0x01 << (IrqNumber % 32));
 }
+
+
+void SetNvicPriority(uint8 irqNumber, uint8 priority)
+{
+    volatile uint8 *ipr = (volatile uint8 *)(0xE000E400UL + irqNumber);
+    *ipr = (uint8)(priority << 4U);   /* shift into top 4 bits */
+}
