@@ -97,7 +97,7 @@ uint8 IPC_DecodeRxPacket(IPC_Packet_t *pkt, RemoteState_t *remote)
 void IPC_Init(void)
 {
     /* Hardware init (SPI, timer) goes here in full build */
-    s_commHealthy = 0U;
+    s_commHealthy = 1U;
     s_missedTicks = 0U;
     s_pendingFloor = 0U;
 }
@@ -120,11 +120,22 @@ uint8 IPC_IsCommHealthy(void)
 
 void IPC_GetRemoteState(RemoteState_t *out)
 {
-    /* Critical section would disable/re-enable IRQs in full build */
+    __asm volatile ("CPSID I" ::: "memory");
     *out = s_remoteState;
+    __asm volatile ("CPSIE I" ::: "memory");
 }
 
 void IPC_SendTargetFloor(uint8 floor)
 {
     s_pendingFloor = floor;
+}
+
+uint8 IPC_ConsumePendingFloor(void)
+{
+    uint8 floor;
+    __asm volatile ("CPSID I" ::: "memory");
+    floor          = s_pendingFloor;
+    s_pendingFloor = 0U;
+    __asm volatile ("CPSIE I" ::: "memory");
+    return floor;
 }

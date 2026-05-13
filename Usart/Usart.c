@@ -27,7 +27,7 @@ void Usart1_Init(void) {
 
     USART1->CR1 &= ~(1 << USART_CR1_OVER8_Pos); // 16 over sampling
 
-    USART1->BRR = 0x683; // Baud Rate 9600
+    USART1->BRR = 0x8B; // Baud Rate 9600
 
     /* Enable Transmission block */
     USART1->CR1 |= (1 << USART_CR1_TE_Pos);

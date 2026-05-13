@@ -247,6 +247,25 @@ void Dispatch_RegisterCall(uint8 floor, uint8 direction)
 
 void Dispatch_RunAlgorithm(Elevator_t *elevA, RemoteState_t *elevB)
 {
+        extern void Usart1_TransmitString(const char *);
+    char dbg[60];
+    Usart1_TransmitString("[DBG] elevB floor=");
+    /* print elevB->current_floor */
+    char fc[4];
+    fc[0] = '0' + elevB->current_floor;
+    fc[1] = ' ';
+    fc[2] = 's';
+    fc[3] = '\0';
+    /* elevB state */
+    fc[2] = '0' + (uint8)elevB->state;
+    Usart1_TransmitString(fc);
+    Usart1_TransmitString(" commOK=");
+    char hc[2];
+    hc[0] = '0' + IPC_IsCommHealthy();
+    hc[1] = '\0';
+    Usart1_TransmitString(hc);
+    Usart1_TransmitString("\r\n");
+    
     uint8 i;
     uint8 slave_comm_ok;
 

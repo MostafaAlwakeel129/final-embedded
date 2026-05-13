@@ -87,4 +87,6 @@ void IPC_GetRemoteState(RemoteState_t *out);
  */
 void IPC_SendTargetFloor(uint8 floor);
 
+uint8 IPC_ConsumePendingFloor(void);
+
 #endif /* IPC_H */
