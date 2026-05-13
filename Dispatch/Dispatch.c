@@ -115,94 +115,81 @@ static uint8 Dispatch_IsOppositeDirection(Elevator_t *elev, HallCall_t *call)
     return 0U;
 }
 
-static sint8 Dispatch_SelectBestElevator(HallCall_t *call,Elevator_t *elevA,RemoteState_t *elevB,
-    uint8 slave_comm_ok)
+static sint8 Dispatch_SelectBestElevator(HallCall_t *call, Elevator_t *elevA, RemoteState_t *elevB, uint8 slave_comm_ok)
 {
     uint8 a_score = 4U;
     uint8 b_score = 4U;
 
+    /* If slave comms are down, Master must take all calls UNLESS it's an Opposite/Passed match */
     if (slave_comm_ok == 0U)
     {
-        return 0;
+        if ((elevA->state != ELEV_EMERGENCY) &&
+            ((elevA->state == ELEV_IDLE) || Dispatch_IsPerfectMatch(elevA, call)))
+        {
+            return 0; /* Assign to A immediately */
+        }
+        return -1; /* Defer until Master is ready */
     }
 
-    if (Dispatch_IsImmediateMatch(elevA, call) != 0U)
-    {
-        return 0;
-    }
+    if (Dispatch_IsImmediateMatch(elevA, call) != 0U) return 0;
 
     if ((elevB != NULL) && (elevB->state != ELEV_EMERGENCY) &&
-        (elevB->current_floor == call->floor) &&
-        (elevB->state == ELEV_IDLE))
+        (elevB->current_floor == call->floor) && (elevB->state == ELEV_IDLE))
     {
         return 1;
     }
 
+    /* Score Elevator A */
     if ((elevA->state != ELEV_EMERGENCY) &&
         ((elevA->state == ELEV_IDLE) || Dispatch_IsPerfectMatch(elevA, call)))
     {
-        a_score = 0U;
+        a_score = 0U; /* Perfect Match or IDLE */
     }
     else if (Dispatch_IsPassedMatch(elevA, call) != 0U)
     {
-        a_score = 1U;
+        a_score = 1U; /* Passed Match */
     }
     else if (Dispatch_IsOppositeDirection(elevA, call) != 0U)
     {
-        a_score = 2U;
-    }
-    else if (elevA->state == ELEV_IDLE)
-    {
-        a_score = 3U;
+        a_score = 2U; /* Opposite Direction */
     }
 
+    /* Score Elevator B */
     if ((elevB != NULL) && (elevB->state != ELEV_EMERGENCY) &&
         ((elevB->state == ELEV_IDLE) || Dispatch_IsPerfectMatch((Elevator_t *)elevB, call)))
     {
-        b_score = 0U;
+        b_score = 0U; /* Perfect Match or IDLE */
     }
     else if ((elevB != NULL) && Dispatch_IsPassedMatch((Elevator_t *)elevB, call) != 0U)
     {
-        b_score = 1U;
+        b_score = 1U; /* Passed Match */
     }
     else if ((elevB != NULL) && Dispatch_IsOppositeDirection((Elevator_t *)elevB, call) != 0U)
     {
-        b_score = 2U;
-    }
-    else if ((elevB != NULL) && (elevB->state == ELEV_IDLE))
-    {
-        b_score = 3U;
+        b_score = 2U; /* Opposite Direction */
     }
 
-    if (a_score < b_score)
+    /* ------------------------------------------------------------------
+     * CRITICAL FIX: DEFER ASSIGNMENT IF NEITHER IS A PERFECT MATCH / IDLE
+     * If scores are > 0, they are going the wrong way. Keep the call pending!
+     * ------------------------------------------------------------------ */
+    if ((a_score > 0U) && (b_score > 0U))
+    {
+        return -1; 
+    }
+
+    /* Assign to the lowest score (0) */
+    if (a_score < b_score) return 0;
+    if (b_score < a_score) return 1;
+
+    /* Tie-breaker (both are score 0) */
+    if (Dispatch_AbsDiff(elevA->current_floor, call->floor) <=
+        Dispatch_AbsDiff(elevB->current_floor, call->floor))
     {
         return 0;
     }
 
-    if (b_score < a_score)
-    {
-        return 1;
-    }
-
-    if ((a_score == 3U) && (b_score == 3U) )
-    {
-        if (Dispatch_AbsDiff(elevA->current_floor, call->floor) <=
-            Dispatch_AbsDiff(elevB->current_floor, call->floor))
-        {return 0;}
-
-        return 1;
-    }
-
-    if ((a_score <= 1U) && (b_score <= 1U))
-    {
-        if (Dispatch_AbsDiff(elevA->current_floor, call->floor) <=
-            Dispatch_AbsDiff(elevB->current_floor, call->floor))
-        {
-            return 0;
-        }
-        return 1;
-    }
-    return 0;
+    return 1;
 }
 
 void Dispatch_Init(void)
@@ -247,25 +234,6 @@ void Dispatch_RegisterCall(uint8 floor, uint8 direction)
 
 void Dispatch_RunAlgorithm(Elevator_t *elevA, RemoteState_t *elevB)
 {
-        extern void Usart1_TransmitString(const char *);
-    char dbg[60];
-    Usart1_TransmitString("[DBG] elevB floor=");
-    /* print elevB->current_floor */
-    char fc[4];
-    fc[0] = '0' + elevB->current_floor;
-    fc[1] = ' ';
-    fc[2] = 's';
-    fc[3] = '\0';
-    /* elevB state */
-    fc[2] = '0' + (uint8)elevB->state;
-    Usart1_TransmitString(fc);
-    Usart1_TransmitString(" commOK=");
-    char hc[2];
-    hc[0] = '0' + IPC_IsCommHealthy();
-    hc[1] = '\0';
-    Usart1_TransmitString(hc);
-    Usart1_TransmitString("\r\n");
-    
     uint8 i;
     uint8 slave_comm_ok;
 
