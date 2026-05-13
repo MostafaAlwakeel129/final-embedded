@@ -220,19 +220,33 @@ int main(void)
     SysTick_Init();
 
     /* ── 9. Main loop ────────────────────────────────────── */
+    static uint8 s_independentMode = 0U;
+
     while (1)
     {
-        /* Run local elevator FSM */
         FSM_Update(&g_elev);
         Telemetry_Update(&g_elev);
-    
-        /* Master: run dispatch algorithm every loop iteration.
-         * Dispatch checks IPC health internally and falls back
-         * to taking all calls if Slave is unreachable.        */
+
         if (g_isMaster)
         {
             IPC_GetRemoteState(&g_remote);
             Dispatch_RunAlgorithm(&g_elev, &g_remote);
         }
-    }
-}
+        else
+        {
+            if (IPC_IsCommHealthy() == 0U && s_independentMode == 0U)
+            {
+                s_independentMode = 1U;
+                Usart1_TransmitString("[WARN] Comm Fault! Slave entering Emergency Mode\r\n");
+                FSM_EmergencyStop(&g_elev);  /* freeze the slave elevator */
+                Gpio_WritePin(GPIO_D, 13, HIGH);  /* turn on emergency LED */
+            }
+            else if (IPC_IsCommHealthy() == 1U && s_independentMode == 1U)
+            {
+                s_independentMode = 0U;
+                Usart1_TransmitString("[INFO] Comm Restored! Slave returning to Normal Mode\r\n");
+                FSM_ClearEmergency(&g_elev);  /* unfreeze */
+                Gpio_WritePin(GPIO_D, 13, LOW);  /* turn off emergency LED */
+            }
+        }
+} }
