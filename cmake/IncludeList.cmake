@@ -16,6 +16,8 @@ set(INCLUDE_LIST ${INCLUDE_LIST}
         ${PROJECT_PATH}/Usart
         ${PROJECT_PATH}/FSM
         ${PROJECT_PATH}/Project
+        ${PROJECT_PATH}/Dispatch
+        ${PROJECT_PATH}/IPC
 
 )
 

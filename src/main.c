@@ -93,14 +93,15 @@ static void Btn_Floor3Sensor(void)
 static void Btn_EmergencyStop(void)
 {
     FSM_EmergencyStop(&elev);
-    /* No UART here — FSM_EmergencyStop is ISR-safe by design.
-     * FSM_Update() will print the alert on the next main loop. */
+    Gpio_WritePin(GPIO_B, 6, HIGH);
+
 }
 
 /* PA4 — Clear emergency and return to IDLE */
 static void Btn_ClearEmergency(void)
 {
     FSM_ClearEmergency(&elev);
+    Gpio_WritePin(GPIO_B, 6, LOW);
 }
 
 /* =========================================================
@@ -120,8 +121,8 @@ int main(void)
 
     /* Motor LED: PB6 → TIM4_CH1 (AF2 on STM32F401)
      * Datasheet Table 9: TIM4_CH1 = PB6, AF2               */
-    Gpio_Init(GPIO_B, 6, GPIO_AF, GPIO_PUSH_PULL);
-    Gpio_SetAF(GPIO_B, 6, GPIO_AF2);
+    Gpio_Init(GPIO_B, 6, GPIO_OUTPUT, GPIO_PUSH_PULL);
+    //Gpio_SetAF(GPIO_B, 6, GPIO_AF2);
 
     /* UART1: PA9 TX, PA10 RX → AF7                         */
     Gpio_Init(GPIO_A, 9,  GPIO_AF, GPIO_PUSH_PULL);
