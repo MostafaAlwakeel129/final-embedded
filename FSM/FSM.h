@@ -7,7 +7,7 @@
 #define SPEED_SLOW   20U
 #define SPEED_FULL   100U
 
-#define DOOR_OPEN_MS 3000U
+#define DOOR_OPEN_MS 375U
 
 /* Timer and PWM resources used by FSM — agree with main.c */
 #define FSM_DOOR_TIMER     TIMER3

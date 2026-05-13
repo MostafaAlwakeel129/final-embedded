@@ -11,7 +11,7 @@
 
 #define FSM_PWM_PSC   15U
 #define FSM_PWM_ARR   99U
-#define TELEMETRY_PERIOD_MS  500U
+#define TELEMETRY_PERIOD_MS  125U
 
 static volatile uint32 s_telemetryMs = 0U;
 static Elevator_t *s_elevPtr = (void*)0;

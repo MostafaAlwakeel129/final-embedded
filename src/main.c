@@ -459,7 +459,7 @@ int main(void)
         Init_Spi_Master();
 
         /* TIM2: 50 ms periodic IPC tick */
-        Timer_StartPeriodic(TIMER2, 50U, Master_IpcTick);
+        Timer_StartPeriodic(TIMER2, 6U, Master_IpcTick);
 
         /* Dispatch system */
         Dispatch_Init();
