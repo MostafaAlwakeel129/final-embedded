@@ -20,6 +20,7 @@ static volatile uint8  slaveRxDone[SPI_PACKET_LEN] = {0};
 static volatile uint8  slaveTxIndex = 0;
 static volatile uint8  slaveRxIndex = 0;
 static          SpiCallback Slave_Callback = 0;
+static uint8 s_isMaster = 0U;
 
 /* --- Your Original Initialization --- */
 void Spi1_Init(uint8 MasterSlave, uint8 ClkPol, uint8 ClkPhase) {
@@ -62,6 +63,8 @@ void Spi1_Init(uint8 MasterSlave, uint8 ClkPol, uint8 ClkPhase) {
 
     /* Enable SPI */
     SPI1->CR1 |= (1U << SPI_CR1_SPE_Pos);
+
+    s_isMaster = MasterSlave;
 }
 
 /* --- Your Original Blocking Transfer --- */
@@ -97,6 +100,7 @@ uint8 Spi1_MasterTransferAsync(uint8 *txBuf, uint8 *rxBuf, uint8 len, SpiCallbac
     Master_TxIndex = 1;
     SPI1->DR = txBuf[0];          
     SPI1->CR2 |= SPI_CR2_TXEIE;
+
 
     return SPI_OK;
 }
@@ -136,28 +140,27 @@ void Spi1_SlaveGetRxBuffer(uint8 *out) {
 void SPI1_IRQHandler(void) {
     uint32 sr = SPI1->SR;
 
-    /* MASTER PATH */
-    if (Master_Busy) {
-        if ((sr & SPI_SR_TXE) && (SPI1->CR2 & SPI_CR2_TXEIE)) {
-            if (Master_TxIndex < Master_Len) {
-                SPI1->DR = Master_TxBuf[Master_TxIndex];
-                Master_TxIndex++;
-            } else {
-                SPI1->CR2 &= ~SPI_CR2_TXEIE;
+    if (s_isMaster) {
+        if (Master_Busy) {
+            if ((sr & SPI_SR_TXE) && (SPI1->CR2 & SPI_CR2_TXEIE)) {
+                if (Master_TxIndex < Master_Len) {
+                    SPI1->DR = Master_TxBuf[Master_TxIndex];
+                    Master_TxIndex++;
+                } else {
+                    SPI1->CR2 &= ~SPI_CR2_TXEIE;
+                }
+            }
+            if (sr & SPI_SR_RXNE) {
+                Master_RxBuf[Master_RxIndex] = (uint8)SPI1->DR;
+                Master_RxIndex++;
+                if (Master_RxIndex >= Master_Len) {
+                    SPI1->CR2 &= ~(SPI_CR2_RXNEIE | SPI_CR2_TXEIE);
+                    Master_Busy = 0;
+                    if (Master_Callback) Master_Callback();
+                }
             }
         }
-        if (sr & SPI_SR_RXNE) {
-            Master_RxBuf[Master_RxIndex] = (uint8)SPI1->DR;
-            Master_RxIndex++;
-            if (Master_RxIndex >= Master_Len) {
-                SPI1->CR2 &= ~(SPI_CR2_RXNEIE | SPI_CR2_TXEIE);
-                Master_Busy = 0;
-                if (Master_Callback) Master_Callback();
-            }
-        }
-    } 
-    /* SLAVE PATH */
-    else {
+    } else {
         if ((sr & SPI_SR_TXE) && (SPI1->CR2 & SPI_CR2_TXEIE)) {
             if (slaveTxIndex < SPI_PACKET_LEN) {
                 SPI1->DR = slaveTxShadow[slaveTxIndex];
@@ -173,7 +176,7 @@ void SPI1_IRQHandler(void) {
                 for (uint8 i = 0; i < SPI_PACKET_LEN; i++) {
                     slaveRxDone[i] = slaveRxBuf[i];
                 }
-                slaveRxIndex = 0;   
+                slaveRxIndex = 0;
                 if (Slave_Callback) Slave_Callback();
             }
         }

@@ -143,7 +143,7 @@ void EXTI9_5_IRQHandler(void) {
         if (ExtiCallbacks[9]) {
             ExtiCallbacks[9]();
         }
-        EXTI->PR |= (0x01 << 8); // Clear pending bit
+        EXTI->PR |= (0x01 << 9); // Clear pending bit
     }
 }
 
