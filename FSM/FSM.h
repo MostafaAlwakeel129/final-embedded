@@ -121,7 +121,4 @@ void FSM_DoorTimerExpired(Elevator_t *elev);
  */
 uint8 FSM_IsIdle(Elevator_t *elev);
 
-
-void FSM_TickMs(void);
-
 #endif /* FSM_H */

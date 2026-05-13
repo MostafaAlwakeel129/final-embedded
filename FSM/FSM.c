@@ -11,9 +11,7 @@
 
 #define FSM_PWM_PSC   15U
 #define FSM_PWM_ARR   99U
-#define TELEMETRY_PERIOD_MS  125U
 
-static volatile uint32 s_telemetryMs = 0U;
 static Elevator_t *s_elevPtr = (void*)0;
 
 /* ---> NEW: Queue to track multiple destinations (0 is unused, 1-4 are floors) <--- */
@@ -40,45 +38,6 @@ static void StartDoorTimer(void)
 static void StopDoorTimer(void)
 {
     Timer_Stop(FSM_DOOR_TIMER);
-}
-
-static const char* StateStr(ElevatorState_t s)
-{
-    switch (s)
-    {
-        case ELEV_IDLE:         return "IDLE";
-        case ELEV_MOVING_UP:    return "MOVING_UP";
-        case ELEV_MOVING_DOWN:  return "MOVING_DOWN";
-        case ELEV_DOORS_OPEN:   return "DOORS_OPEN";
-        case ELEV_EMERGENCY:    return "EMERGENCY";
-        default:                return "UNKNOWN";
-    }
-}
-
-static void TransmitUint8(uint8 val)
-{
-    char  buf[4];
-    uint8 len = 0U;
-    if (val == 0U) { Usart1_TransmitString("0"); return; }
-    while (val > 0U && len < 3U)
-    {
-        buf[len++] = (char)('0' + (val % 10U));
-        val       /= 10U;
-    }
-    uint8 i = 0U, j = (uint8)(len - 1U);
-    while (i < j) { char t = buf[i]; buf[i] = buf[j]; buf[j] = t; i++; j--; }
-    buf[len] = '\0';
-    Usart1_TransmitString(buf);
-}
-
-static void SendTelemetry(Elevator_t *elev)
-{
-    Usart1_TransmitString("[TEL] ");
-    Usart1_TransmitString(StateStr(elev->state));
-    Usart1_TransmitString(" F:"); TransmitUint8(elev->current_floor);
-    Usart1_TransmitString(" T:"); TransmitUint8(elev->target_floor);
-    Usart1_TransmitString(" D:"); TransmitUint8(elev->direction);
-    Usart1_TransmitString("\r\n");
 }
 
 /* =========================================================
@@ -112,12 +71,6 @@ void FSM_Init(Elevator_t *elev)
 
 void FSM_Update(Elevator_t *elev)
 {
-    if (s_telemetryMs >= TELEMETRY_PERIOD_MS)
-    {
-        s_telemetryMs = 0U;
-        SendTelemetry(elev);
-    }
-
     if (elev->flags.emergencyFlag)
     {
         if (elev->state != ELEV_EMERGENCY)
@@ -302,9 +255,4 @@ uint8 FSM_IsIdle(Elevator_t *elev)
     /* Only truly idle if the state is IDLE and the queue is completely empty */
     uint8 has_stops = s_stops[1] | s_stops[2] | s_stops[3] | s_stops[4];
     return ((elev->state == ELEV_IDLE) && (has_stops == 0U)) ? 1U : 0U;
-}
-
-void FSM_TickMs(void)
-{
-    s_telemetryMs++;
 }

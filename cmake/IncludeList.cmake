@@ -13,6 +13,7 @@ set(INCLUDE_LIST ${INCLUDE_LIST}
         ${PROJECT_PATH}/RingBuffer
         ${PROJECT_PATH}/Spi
         ${PROJECT_PATH}/Timer
+        ${PROJECT_PATH}/Telemetry
         ${PROJECT_PATH}/Usart
         ${PROJECT_PATH}/FSM
         ${PROJECT_PATH}/Project

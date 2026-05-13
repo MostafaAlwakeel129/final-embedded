@@ -73,6 +73,7 @@
 #include "Spi.h"
 #include "Timer.h"
 #include "Fsm.h"
+#include "Telemetry.h"
 #include "Ipc.h"
 #include "Dispatch.h"
 #include "project.h"
@@ -217,7 +218,7 @@ static void Master_IpcTick(void)
  * ========================================================= */
 void SysTick_Handler(void)
 {
-    FSM_TickMs();
+    Telemetry_TickMs();
 }
 
 /* =========================================================
@@ -486,7 +487,8 @@ int main(void)
     {
         /* Run local elevator FSM */
         FSM_Update(&g_elev);
-
+        Telemetry_Update(&g_elev);
+    
         /* Master: run dispatch algorithm every loop iteration.
          * Dispatch checks IPC health internally and falls back
          * to taking all calls if Slave is unreachable.        */
@@ -495,10 +497,5 @@ int main(void)
             IPC_GetRemoteState(&g_remote);
             Dispatch_RunAlgorithm(&g_elev, &g_remote);
         }
-
-        /* Both: if emergency cleared externally (e.g. second press
-         * of emergency button could be wired as clear — optional).
-         * For now emergency is only cleared via FSM_ClearEmergency
-         * which you can call from a dedicated clear button ISR.  */
     }
 }
