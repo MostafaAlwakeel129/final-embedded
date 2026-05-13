@@ -240,6 +240,12 @@ static void Cb_Emergency(void)
     Gpio_WritePin(GPIO_D, 13, HIGH);   /* emergency LED on */
 }
 
+static void Cb_Emergency_Clear(void)
+{
+    FSM_ClearEmergency(&g_elev);
+    Gpio_WritePin(GPIO_D, 13, LOW);   /* emergency LED off */
+}
+
 /* Floor sensors */
 static void Cb_Sensor_F1(void) { FSM_FloorReached(&g_elev, FLOOR_1); }
 static void Cb_Sensor_F2(void) { FSM_FloorReached(&g_elev, FLOOR_2); }
@@ -268,6 +274,7 @@ static void Init_SharedInputs(void)
     Gpio_Init(GPIO_C, 2, GPIO_INPUT, GPIO_PULL_UP);
     Gpio_Init(GPIO_C, 3, GPIO_INPUT, GPIO_PULL_UP);
     Gpio_Init(GPIO_C, 4, GPIO_INPUT, GPIO_PULL_UP);
+    Gpio_Init(GPIO_C, 13, GPIO_INPUT, GPIO_PULL_UP);
 
     /* PD11, PD12, PD14, PD15: floor sensors (both boards) */
     Gpio_Init(GPIO_D, 11, GPIO_INPUT, GPIO_PULL_UP);
@@ -281,6 +288,7 @@ static void Init_SharedInputs(void)
     Exti_Init(EXTI_LINE_2, EXTI_PORT_C, EXTI_EDGE_FALLING, Cb_Cabin_F3);
     Exti_Init(EXTI_LINE_3, EXTI_PORT_C, EXTI_EDGE_FALLING, Cb_Cabin_F4);
     Exti_Init(EXTI_LINE_4, EXTI_PORT_C, EXTI_EDGE_FALLING, Cb_Emergency);
+    Exti_Init(EXTI_LINE_13, EXTI_PORT_C, EXTI_EDGE_FALLING, Cb_Emergency_Clear);
 
     /* EXTI — floor sensors on Port D, falling edge */
     Exti_Init(EXTI_LINE_11, EXTI_PORT_D, EXTI_EDGE_FALLING, Cb_Sensor_F1);
@@ -305,6 +313,7 @@ static void Init_SharedInputs(void)
     Exti_Enable(EXTI_LINE_4);
     Exti_Enable(EXTI_LINE_11);
     Exti_Enable(EXTI_LINE_12);
+    Exti_Enable(EXTI_LINE_13);
     Exti_Enable(EXTI_LINE_14);
     Exti_Enable(EXTI_LINE_15);
 }

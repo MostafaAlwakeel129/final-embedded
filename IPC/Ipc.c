@@ -120,9 +120,9 @@ uint8 IPC_IsCommHealthy(void)
 
 void IPC_GetRemoteState(RemoteState_t *out)
 {
-    __asm volatile ("CPSID I" ::: "memory");
+    Enter_Critical();
     *out = s_remoteState;
-    __asm volatile ("CPSIE I" ::: "memory");
+    Exit_Critical();
 }
 
 void IPC_SendTargetFloor(uint8 floor)
@@ -133,9 +133,9 @@ void IPC_SendTargetFloor(uint8 floor)
 uint8 IPC_ConsumePendingFloor(void)
 {
     uint8 floor;
-    __asm volatile ("CPSID I" ::: "memory");
+    Enter_Critical();
     floor          = s_pendingFloor;
     s_pendingFloor = 0U;
-    __asm volatile ("CPSIE I" ::: "memory");
+    Exit_Critical();
     return floor;
 }

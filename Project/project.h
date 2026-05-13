@@ -2,6 +2,9 @@
 #define PROJECT_H
 #include "Std_Types.h"
 
+#define Enter_Critical()  __asm volatile ("CPSID I" ::: "memory")
+#define Exit_Critical()   __asm volatile ("CPSIE I" ::: "memory")
+
 /* Direction values */
 #define DIR_NONE   0U
 #define DIR_UP     1U

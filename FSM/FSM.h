@@ -4,7 +4,7 @@
 #include "project.h"
 
 #define SPEED_STOP   0U
-#define SPEED_SLOW   20U
+#define SPEED_SLOW   5U
 #define SPEED_FULL   100U
 
 #define DOOR_OPEN_MS 375U

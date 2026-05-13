@@ -119,13 +119,15 @@ void FSM_Update(Elevator_t *elev)
 
                 if (elev->target_floor > elev->current_floor)
                 {
-                    elev->state     = ELEV_MOVING_UP;
-                    SetMotorSpeed(elev, SPEED_FULL);
+                    elev->state = ELEV_MOVING_UP;
+                    uint8 dist = elev->target_floor - elev->current_floor;
+                    SetMotorSpeed(elev, (dist == 1U) ? SPEED_SLOW : SPEED_FULL);
                 }
                 else if (elev->target_floor < elev->current_floor)
                 {
-                    elev->state     = ELEV_MOVING_DOWN;
-                    SetMotorSpeed(elev, SPEED_FULL);
+                    elev->state = ELEV_MOVING_DOWN;
+                    uint8 dist = elev->current_floor - elev->target_floor;
+                    SetMotorSpeed(elev, (dist == 1U) ? SPEED_SLOW : SPEED_FULL);
                 }
                 else
                 {
@@ -149,10 +151,10 @@ void FSM_Update(Elevator_t *elev)
         {
             if (elev->flags.floorReachedFlag)
             {
-                __asm volatile ("CPSID I" ::: "memory");
+                Enter_Critical();
                 uint8 reached = elev->flags.floorReachedValue;
                 elev->flags.floorReachedFlag = 0U;
-                __asm volatile ("CPSIE I" ::: "memory");
+                Exit_Critical();
 
                 elev->current_floor = reached;
 
@@ -199,19 +201,19 @@ void FSM_SetTarget(Elevator_t *elev, uint8 floor)
     if (elev->state == ELEV_EMERGENCY)      return;
 
     /* ---> Add stop to queue instead of overwriting current target <--- */
-    __asm volatile ("CPSID I" ::: "memory");
+    Enter_Critical();
     s_stops[floor] = 1U;
     elev->flags.newTargetFlag = 1U; /* Triggers IDLE to re-evaluate */
-    __asm volatile ("CPSIE I" ::: "memory");
+    Exit_Critical();
 }
 
 void FSM_FloorReached(Elevator_t *elev, uint8 floor)
 {
-    __asm volatile ("CPSID I" ::: "memory");
+    Enter_Critical();
     elev->current_floor           = floor;
     elev->flags.floorReachedValue = floor;
     elev->flags.floorReachedFlag  = 1U;
-    __asm volatile ("CPSIE I" ::: "memory");
+    Exit_Critical();
 }
 
 void FSM_EmergencyStop(Elevator_t *elev)
@@ -223,7 +225,7 @@ void FSM_EmergencyStop(Elevator_t *elev)
 
 void FSM_ClearEmergency(Elevator_t *elev)
 {
-    __asm volatile ("CPSID I" ::: "memory");
+    Enter_Critical();
     elev->flags.emergencyFlag = 0U;
     elev->flags.newTargetFlag = 0U;
 
@@ -233,7 +235,7 @@ void FSM_ClearEmergency(Elevator_t *elev)
     elev->direction     = DIR_NONE;
     elev->speed_percent = SPEED_STOP;
     elev->target_floor  = elev->current_floor;
-    __asm volatile ("CPSIE I" ::: "memory");
+    Exit_Critical();
 }
 
 void FSM_DoorTimerExpired(Elevator_t *elev)
