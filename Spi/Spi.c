@@ -4,6 +4,7 @@
 #include "stm32f401xe.h"
 #include "Gpio.h"
 #include "Spi.h"
+#include "Nvic.h"
 
 /* --- Non-Blocking State Variables --- */
 static volatile uint8  *Master_TxBuf = 0;
@@ -91,7 +92,7 @@ uint8 Spi1_MasterTransferAsync(uint8 *txBuf, uint8 *rxBuf, uint8 len, SpiCallbac
     Master_Busy = 1;
 
     /* Enable SPI Interrupt in NVIC (Position 35) */
-    NVIC->ISER[1] |= (1U << (35U % 32U));
+    Nvic_EnableIrq(35U);
 
     /* Enable RX Interrupt */
     SPI1->CR2 |= SPI_CR2_RXNEIE;
@@ -124,7 +125,7 @@ void Spi1_SlavePreload(uint8 *txBuf, uint8 len) {
 
 void Spi1_SlaveEnableRx(SpiCallback Callback) {
     Slave_Callback = Callback;
-    NVIC->ISER[1] |= (1U << (35U % 32U));
+    Nvic_EnableIrq(35U);
     SPI1->CR2 |= SPI_CR2_RXNEIE;
 }
 

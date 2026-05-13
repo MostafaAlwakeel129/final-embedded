@@ -21,7 +21,7 @@
  * Slave:  pre-loads an empty packet into SPI TX and enables RXNEIE.
  * Call once at startup after SPI and Timer drivers are ready.
  */
-void IPC_Init(void);
+void IPC_Init(uint8 isMaster, Elevator_t *elev);
 
 /*
  * IPC_Tick  — called from TIMER2 ISR every 50 ms (Master only)

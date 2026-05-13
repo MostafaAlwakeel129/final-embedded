@@ -1,70 +1,3 @@
-/**
- * main.c  —  Collaborative Dual-Elevator System (Single Hex, Dual Role)
- *
- * Role selection at runtime via PC10:
- *   PC10 pulled LOW (jumper to GND) = MASTER (Dispatcher + Elevator A)
- *   PC10 floating   (internal pull-up, no jumper) = SLAVE  (Elevator B)
- *
- * ── MASTER pin map ────────────────────────────────────────────────────
- *  INPUTS (active-low, internal pull-up):
- *    PC0  EXTI0   Cabin button  Floor 1
- *    PC1  EXTI1   Cabin button  Floor 2
- *    PC2  EXTI2   Cabin button  Floor 3
- *    PC3  EXTI3   Cabin button  Floor 4
- *    PC4  EXTI4   Emergency stop
- *    PC5  EXTI5   Hall call U1  (Floor 1 Up)
- *    PD6  EXTI6   Hall call D2  (Floor 2 Down)
- *    PD7  EXTI7   Hall call U2  (Floor 2 Up)
- *    PD8  EXTI8   Hall call D3  (Floor 3 Down)
- *    PD9  EXTI9   Hall call U3  (Floor 3 Up)
- *    PD10 EXTI10  Hall call D4  (Floor 4 Down)
- *    PD11 EXTI11  Floor sensor  Floor 1
- *    PD12 EXTI12  Floor sensor  Floor 2
- *    PD14 EXTI14  Floor sensor  Floor 3
- *    PD15 EXTI15  Floor sensor  Floor 4
- *
- *  OUTPUTS:
- *    PB6  TIM4_CH1 AF2   Motor LED (PWM)
- *    PD13 GPIO_OUTPUT    Emergency LED
- *
- *  SPI1 Master:
- *    PA4  GPIO_OUTPUT    CS (active-low)
- *    PA5  AF5            SCK
- *    PA6  AF5            MISO
- *    PA7  AF5            MOSI
- *
- *  UART1:  PA9 TX (AF7),  PA10 RX (AF7)
- *  TIM2:   50 ms periodic IPC tick
- *  TIM3:   door timer (owned by FSM)
- *  TIM4:   motor PWM  (owned by FSM)
- *
- * ── SLAVE pin map ─────────────────────────────────────────────────────
- *  INPUTS (active-low, internal pull-up):
- *    PC0  EXTI0   Cabin button  Floor 1
- *    PC1  EXTI1   Cabin button  Floor 2
- *    PC2  EXTI2   Cabin button  Floor 3
- *    PC3  EXTI3   Cabin button  Floor 4
- *    PC4  EXTI4   Emergency stop
- *    PD11 EXTI11  Floor sensor  Floor 1
- *    PD12 EXTI12  Floor sensor  Floor 2
- *    PD14 EXTI14  Floor sensor  Floor 3
- *    PD15 EXTI15  Floor sensor  Floor 4
- *
- *  OUTPUTS:
- *    PB6  TIM4_CH1 AF2   Motor LED (PWM)
- *    PD13 GPIO_OUTPUT    Emergency LED
- *
- *  SPI1 Slave:
- *    PA4  AF5  NSS  (hardware, driven by Master)
- *    PA5  AF5  SCK
- *    PA6  AF5  MISO
- *    PA7  AF5  MOSI
- *
- *  UART1:  PA9 TX (AF7),  PA10 RX (AF7)
- *  TIM3:   door timer (owned by FSM)
- *  TIM4:   motor PWM  (owned by FSM)
- */
-
 #include "Rcc.h"
 #include "Gpio.h"
 #include "Exti.h"
@@ -78,154 +11,16 @@
 #include "Dispatch.h"
 #include "project.h"
 
-/* =========================================================
- * Role flag — set once at startup by reading PC10
- * ========================================================= */
+
 static uint8 g_isMaster = 0U;
-
-/* =========================================================
- * Shared elevator instance (both roles use this)
- * ========================================================= */
 static Elevator_t g_elev;
-
-/* =========================================================
- * Master-only: remote state snapshot updated each IPC tick
- * ========================================================= */
 static RemoteState_t g_remote;
 
-/* =========================================================
- * SPI packet buffers (Master)
- * ========================================================= */
-static uint8 g_spiTxBuf[SPI_PACKET_LEN];
-static uint8 g_spiRxBuf[SPI_PACKET_LEN];
-
-/* =========================================================
- * CS pin helpers (Master only)
- * ========================================================= */
-static void CS_Low(void)
-{
-    Gpio_WritePin(GPIO_A, 4, LOW);
-}
-
-static void CS_High(void)
-{
-    Gpio_WritePin(GPIO_A, 4, HIGH);
-}
-
-/* =========================================================
- * SPI transfer complete callback (Master)
- * Runs in ISR context — keep minimal.
- * ========================================================= */
-static void Master_SpiDoneCallback(void)
-{
-    IPC_Packet_t rxPkt;
-    uint8 i;
-
-    CS_High();
-
-    /* Copy raw bytes into packet struct */
-    for (i = 0U; i < SPI_PACKET_LEN; i++)
-    {
-        ((uint8 *)&rxPkt)[i] = g_spiRxBuf[i];
-    }
-
-    /* Decode — updates internal s_remoteState and health flag */
-    IPC_DecodeRxPacket(&rxPkt, &g_remote);
-}
-
-/* =========================================================
- * SPI receive complete callback (Slave)
- * Runs in ISR context — keep minimal.
- * ========================================================= */
-static void Slave_SpiDoneCallback(void)
-{
-    uint8 rawBuf[SPI_PACKET_LEN];
-    IPC_Packet_t rxPkt;
-    IPC_Packet_t txPkt;
-    uint8 i;
-
-    /* Read what Master sent */
-    Spi1_SlaveGetRxBuffer(rawBuf);
-    for (i = 0U; i < SPI_PACKET_LEN; i++)
-    {
-        ((uint8 *)&rxPkt)[i] = rawBuf[i];
-    }
-
-    /* Decode master packet to check for target floor command */
-    if (IPC_DecodeRxPacket(&rxPkt, &g_remote) != 0U)
-    {
-        /*
-         * Master encodes target floor for slave in the reserved byte.
-         * If non-zero, treat it as a new target assignment.
-         */
-        if (rxPkt.reserved != 0U)
-        {
-            FSM_SetTarget(&g_elev, rxPkt.reserved);
-        }
-    }
-
-    /* Pre-load our state for the next transfer */
-    IPC_EncodeTxPacket(&g_elev, &txPkt);
-    for (i = 0U; i < SPI_PACKET_LEN; i++)
-    {
-        rawBuf[i] = ((uint8 *)&txPkt)[i];
-    }
-    Spi1_SlavePreload(rawBuf, SPI_PACKET_LEN);
-}
-
-/* =========================================================
- * IPC tick callback — called from TIM2 ISR every 50 ms
- * Master only: encodes local state, drives CS, starts transfer
- * ========================================================= */
-static void Master_IpcTick(void)
-{
-    IPC_Packet_t txPkt;
-    uint8 i;
-    uint8 pendingFloor;
-
-    IPC_Tick();   /* increments missed-tick counter */
-
-    /* Encode local elevator state into TX packet */
-    IPC_EncodeTxPacket(&g_elev, &txPkt);
-
-    /*
-     * Piggyback pending target floor for Slave in reserved byte.
-     * IPC_SendTargetFloor() stores it; we consume it here.
-     */
-    IPC_GetRemoteState(&g_remote);   /* re-use function; pendingFloor is internal */
-    /* Access pending floor via the IPC module's internal latch */
-    /* (IPC_SendTargetFloor stores to s_pendingFloor; we expose it via reserved) */
-    /* We encode it directly: Dispatch calls IPC_SendTargetFloor(floor), which   */
-    /* sets s_pendingFloor. We read it back through a dedicated getter below.    */
-    pendingFloor = IPC_ConsumePendingFloor();   /* see Ipc addition below */
-    txPkt.reserved = pendingFloor;
-    txPkt.checksum = (uint8)(txPkt.header ^ txPkt.state ^ txPkt.floor
-                             ^ txPkt.direction ^ txPkt.speed
-                             ^ txPkt.flags ^ txPkt.reserved);
-
-    for (i = 0U; i < SPI_PACKET_LEN; i++)
-    {
-        g_spiTxBuf[i] = ((uint8 *)&txPkt)[i];
-    }
-
-    CS_Low();
-    Spi1_MasterTransferAsync(g_spiTxBuf, g_spiRxBuf,
-                             SPI_PACKET_LEN, Master_SpiDoneCallback);
-}
-
-/* =========================================================
- * 1 ms SysTick — feeds FSM telemetry counter
- * ========================================================= */
 void SysTick_Handler(void)
 {
     Telemetry_TickMs();
 }
 
-/* =========================================================
- * ── SHARED EXTI CALLBACKS ─────────────────────────────────
- * Cabin buttons and emergency are identical on both boards.
- * Floor sensors are wired the same on both boards.
- * ========================================================= */
 
 /* Cabin buttons */
 static void Cb_Cabin_F1(void) { FSM_SetTarget(&g_elev, FLOOR_1); }
@@ -246,16 +41,12 @@ static void Cb_Emergency_Clear(void)
     Gpio_WritePin(GPIO_D, 13, LOW);   /* emergency LED off */
 }
 
-/* Floor sensors */
+
 static void Cb_Sensor_F1(void) { FSM_FloorReached(&g_elev, FLOOR_1); }
 static void Cb_Sensor_F2(void) { FSM_FloorReached(&g_elev, FLOOR_2); }
 static void Cb_Sensor_F3(void) { FSM_FloorReached(&g_elev, FLOOR_3); }
 static void Cb_Sensor_F4(void) { FSM_FloorReached(&g_elev, FLOOR_4); }
 
-/* =========================================================
- * ── MASTER-ONLY EXTI CALLBACKS ────────────────────────────
- * Hall calls — registered only when g_isMaster == 1
- * ========================================================= */
 static void Cb_Hall_U1(void) { Dispatch_RegisterCall(FLOOR_1, DIR_UP);   }
 static void Cb_Hall_D2(void) { Dispatch_RegisterCall(FLOOR_2, DIR_DOWN); }
 static void Cb_Hall_U2(void) { Dispatch_RegisterCall(FLOOR_2, DIR_UP);   }
@@ -263,12 +54,8 @@ static void Cb_Hall_D3(void) { Dispatch_RegisterCall(FLOOR_3, DIR_DOWN); }
 static void Cb_Hall_U3(void) { Dispatch_RegisterCall(FLOOR_3, DIR_UP);   }
 static void Cb_Hall_D4(void) { Dispatch_RegisterCall(FLOOR_4, DIR_DOWN); }
 
-/* =========================================================
- * GPIO + EXTI init helpers
- * ========================================================= */
 static void Init_SharedInputs(void)
 {
-    /* PC0–PC4: cabin buttons + emergency (both boards) */
     Gpio_Init(GPIO_C, 0, GPIO_INPUT, GPIO_PULL_UP);
     Gpio_Init(GPIO_C, 1, GPIO_INPUT, GPIO_PULL_UP);
     Gpio_Init(GPIO_C, 2, GPIO_INPUT, GPIO_PULL_UP);
@@ -366,56 +153,8 @@ static void Init_Uart(void)
     Usart1_Init();
 }
 
-static void Init_Spi_Master(void)
-{
-    /* PA4 CS — manual GPIO output, start HIGH (deasserted) */
-    Gpio_Init(GPIO_A, 4, GPIO_OUTPUT, GPIO_PUSH_PULL);
-    CS_High();
+void SysTick_Init(void);
 
-    Spi1_Init(SPI_MASTER, SPI_IDLE_LOW, SPI_SAMPLE_FIRST_TRANSITION);
-}
-
-static void Init_Spi_Slave(void)
-{
-    /* PA4 NSS is configured inside Spi1_Init when MasterSlave==SPI_SLAVE */
-
-    Spi1_Init(SPI_SLAVE, SPI_IDLE_LOW, SPI_SAMPLE_FIRST_TRANSITION);
-
-    /* Pre-load an empty (IDLE at Floor 1) packet so Slave is ready
-     * for the very first Master transfer */
-    {
-        IPC_Packet_t initPkt;
-        uint8 buf[SPI_PACKET_LEN];
-        uint8 i;
-        IPC_EncodeTxPacket(&g_elev, &initPkt);
-        for (i = 0U; i < SPI_PACKET_LEN; i++)
-        {
-            buf[i] = ((uint8 *)&initPkt)[i];
-        }
-        Spi1_SlavePreload(buf, SPI_PACKET_LEN);
-        Spi1_SlaveEnableRx(Slave_SpiDoneCallback);
-    }
-}
-
-/* =========================================================
- * SysTick setup — 1 ms tick at 16 MHz HSI
- * ========================================================= */
-static void SysTick_Init(void)
-{
-    /* SysTick reload for 1 ms: 16000000 / 1000 - 1 = 15999 */
-    volatile uint32 *SYST_RVR = (volatile uint32 *)0xE000E014;
-    volatile uint32 *SYST_CVR = (volatile uint32 *)0xE000E018;
-    volatile uint32 *SYST_CSR = (volatile uint32 *)0xE000E010;
-
-    *SYST_RVR = 15999UL;
-    *SYST_CVR = 0UL;
-    /* CLKSOURCE=1 (processor clock), TICKINT=1, ENABLE=1 */
-    *SYST_CSR = 0x07UL;
-}
-
-/* =========================================================
- * main
- * ========================================================= */
 int main(void)
 {
     /* ── 1. Enable all required clocks ───────────────────── */
@@ -461,23 +200,12 @@ int main(void)
     FSM_Init(&g_elev);
 
     /* ── 5. IPC init ─────────────────────────────────────── */
-    IPC_Init();
+    IPC_Init(g_isMaster, &g_elev);
 
     /* ── 6. Role-specific SPI + timer init ───────────────── */
     if (g_isMaster)
     {
-        Init_Spi_Master();
-
-        /* TIM2: 50 ms periodic IPC tick */
-        Timer_StartPeriodic(TIMER2, 6U, Master_IpcTick);
-
-        /* Dispatch system */
         Dispatch_Init();
-    }
-    else
-    {
-        Init_Spi_Slave();
-        /* Slave has no IPC timer — it reacts to Master transfers */
     }
 
     /* ── 7. Input GPIO + EXTI init ───────────────────────── */

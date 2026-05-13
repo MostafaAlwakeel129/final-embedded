@@ -38,4 +38,6 @@ void Timer_StartPeriodic(uint8 TimerId, uint32 DelayMs, TimerCallback Callback);
 void Timer_OcToggleInit(uint8 TimerId, uint8 Channel,
                         uint16 Prescaler, uint16 Period);
 
+void SysTick_Init(void);
+
 #endif /* TIMER_H */

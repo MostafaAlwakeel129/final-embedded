@@ -191,6 +191,17 @@ void Timer_StartPeriodic(uint8 TimerId, uint32 DelayMs, TimerCallback Callback)
     SET_BIT(timer->CR1, CR1_CEN);
 }
 
+void SysTick_Init(void)
+{
+    volatile uint32 *SYST_RVR = (volatile uint32 *)0xE000E014;
+    volatile uint32 *SYST_CVR = (volatile uint32 *)0xE000E018;
+    volatile uint32 *SYST_CSR = (volatile uint32 *)0xE000E010;
+
+    *SYST_RVR = 15999UL;
+    *SYST_CVR = 0UL;
+    *SYST_CSR = 0x07UL;
+}
+
 
 void TIM2_IRQHandler(void) {
     Timer_HandleIrq(0);

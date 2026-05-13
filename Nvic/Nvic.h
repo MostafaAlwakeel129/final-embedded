@@ -8,6 +8,7 @@
 #ifndef NVIC_H
 #define NVIC_H
 #include "Std_Types.h"
+#include "Nvic.h"
 
 
 void Nvic_EnableIrq(uint8 IrqNumber);
